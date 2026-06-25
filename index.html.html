@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>訊號與系統：DSP 互動實驗室</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px; }
+        h1 { text-align: center; color: #4CAF50; margin-bottom: 30px; letter-spacing: 2px; }
+        .module { display: flex; background-color: #1e1e1e; margin-bottom: 30px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .theory-panel { flex: 1; padding: 30px; background-color: #262626; border-right: 2px solid #333; }
+        .interactive-panel { flex: 1.5; padding: 30px; display: flex; flex-direction: column; }
+        .chart-container { flex-grow: 1; min-height: 250px; }
+        h2 { color: #64B5F6; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        h3 { color: #FFCA28; font-size: 1.1em; margin-top: 20px; }
+        p { line-height: 1.6; color: #bbb; font-size: 0.95em; }
+        .controls { margin-top: 20px; background-color: #333; padding: 15px; border-radius: 8px; }
+        .slider-group { display: flex; align-items: center; margin-bottom: 10px; }
+        label { width: 150px; font-weight: bold; font-size: 0.9em; }
+        input[type="range"] { flex-grow: 1; margin: 0 15px; cursor: pointer; }
+        span.value { width: 40px; text-align: right; color: #4CAF50; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🎙️ 進階音訊降噪演算法互動實驗室</h1>
+
+    <div class="module">
+        <div class="theory-panel">
+            <h2>模組一：過減因子與譜底限幅</h2>
+            <h3>💡 學習目標：</h3>
+            <p>了解如何透過參數調整，在「保留原始音質」與「徹底消除雜訊」之間取得完美平衡。</p>
+            <h3>📖 核心理論：</h3>
+            <p>在這首包含安靜呢喃與高亢爆發的男聲演唱中，動態範圍極大。<strong>過減因子 (Alpha)</strong> 負責決定扣除雜訊的力道。拉太高會吃掉男聲的氣音細節；拉太低則雜訊殘留。<br><br><strong>譜底限幅 (Beta)</strong> 則是防止相減後出現負值或尖銳突波，為音訊保留約 5% 的自然舒適底噪，避免刺耳的音樂性雜訊。</p>
+        </div>
+        <div class="interactive-panel">
+            <div class="chart-container"><canvas id="chartSub"></canvas></div>
+            <div class="controls">
+                <div class="slider-group">
+                    <label>過減因子 (Alpha):</label>
+                    <input type="range" id="subAlpha" min="0" max="5" step="0.1" value="1.0">
+                    <span id="valAlpha" class="value">1.0</span>
+                </div>
+                <div class="slider-group">
+                    <label>譜底限幅 (Beta):</label>
+                    <input type="range" id="subBeta" min="0" max="0.2" step="0.01" value="0.05">
+                    <span id="valBeta" class="value">0.05</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="module">
+        <div class="theory-panel">
+            <h2>模組二：預強調濾波器 (Pre-emphasis)</h2>
+            <h3>💡 學習目標：</h3>
+            <p>觀察一階高通濾波器如何改變頻率響應，進而保護高頻細節。</p>
+            <h3>📖 核心理論：</h3>
+            <p>公式為 <code>y[n] = x[n] - a*x[n-1]</code>。語音能量天生集中在低頻，高頻的唇齒音與吉他刷弦泛音極易在降噪時被當成白噪音抹除。<br><br>透過調整係數 <strong>a</strong>，我們改變了系統的轉移函數。當 a 逼近 0.97 時，右側的波德圖 (振幅響應) 會明顯呈現「壓抑低頻、提拉放大高頻」的特性。</p>
+        </div>
+        <div class="interactive-panel">
+            <div class="chart-container"><canvas id="chartPre"></canvas></div>
+            <div class="controls">
+                <div class="slider-group">
+                    <label>濾波係數 (a):</label>
+                    <input type="range" id="preA" min="0" max="0.99" step="0.01" value="0.97">
+                    <span id="valA" class="value">0.97</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="module">
+        <div class="theory-panel">
+            <h2>模組三：語音活動偵測 (VAD)</h2>
+            <h3>💡 學習目標：</h3>
+            <p>理解如何利用短時能量 (Short-time Energy) 自動區分語音與純背景雜訊。</p>
+            <h3>📖 核心理論：</h3>
+            <p>在音訊處理前，系統必須先建立「雜訊指紋」。我們計算每一段時間框的總能量，並設定一條<strong>能量門檻 (Threshold)</strong>。<br><br>低於此門檻的區段（圖中紅點）被系統認定為純吉他休止或男聲換氣空檔，系統將收集這些區段的頻譜來計算平均雜訊能量；高於門檻的（藍點）則被保護起來不干擾雜訊估測。</p>
+        </div>
+        <div class="interactive-panel">
+            <div class="chart-container"><canvas id="chartVad"></canvas></div>
+            <div class="controls">
+                <div class="slider-group">
+                    <label>能量判定門檻:</label>
+                    <input type="range" id="vadThresh" min="5" max="80" step="1" value="30">
+                    <span id="valThresh" class="value">30</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="module">
+        <div class="theory-panel">
+            <h2>模組四：重疊相加法 (OLA)</h2>
+            <h3>💡 學習目標：</h3>
+            <p>視覺化理解 Hamming 窗函數交疊如何消弭邊界不連續性。</p>
+            <h3>📖 核心理論：</h3>
+            <p>為了消除切割音訊造成的頻譜洩漏，我們套用了邊緣趨近於零的 Hamming 窗。但這會導致邊界能量流失。<br><br>我們設定了 50% 的步進交疊 (Overlap)。如右圖所示，相鄰的窗函數（藍線與紅線）其衰減的尾巴與漸強的開頭相互疊加，最終總和（綠色虛線）會維持在穩定的常數，達成完美的平滑過渡。</p>
+        </div>
+        <div class="interactive-panel">
+            <div class="chart-container"><canvas id="chartOla"></canvas></div>
+            <div class="controls" style="text-align: center; color: #aaa;">
+                <i>(此為理論展示模型，無調整參數。展示 50% 疊加之能量守恆)</i>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.color = '#aaaaaa';
+        Chart.defaults.font.family = "'Segoe UI', sans-serif";
+
+        // ==========================================
+        // 模組一：頻譜相減
+        // ==========================================
+        const ctxSub = document.getElementById('chartSub').getContext('2d');
+        const labelsSub = Array.from({length: 100}, (_, i) => i);
+        const originalMag = labelsSub.map(i => {
+            let s = 0; if (i==20) s=90; if (i==35) s=60; if (i==75) s=30; // 模擬低中高頻
+            return s + (Math.random()*15 + 10);
+        });
+        const noiseMag = labelsSub.map(() => Math.random()*5 + 15);
+        
+        let chartSub = new Chart(ctxSub, {
+            type: 'line',
+            data: { labels: labelsSub, datasets: [
+                { label: '原始頻譜', data: originalMag, borderColor: '#888', borderWidth: 2, fill: false, pointRadius: 0, tension: 0.2 },
+                { label: '雜訊指紋', data: noiseMag, borderColor: '#FF5252', borderDash: [5,5], borderWidth: 2, fill: false, pointRadius: 0, tension: 0.2 },
+                { label: '降噪後頻譜', data: [], borderColor: '#4CAF50', backgroundColor: 'rgba(76, 175, 80, 0.2)', borderWidth: 3, fill: true, pointRadius: 0, tension: 0.2 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 120, title: {display: true, text: 'Magnitude'} }, x: {title: {display: true, text: 'Frequency'}} }, animation: {duration: 0} }
+        });
+
+        function updateSub() {
+            let a = parseFloat(document.getElementById('subAlpha').value);
+            let b = parseFloat(document.getElementById('subBeta').value);
+            chartSub.data.datasets[2].data = originalMag.map((mag, i) => Math.max(mag - a * noiseMag[i], b * noiseMag[i]));
+            chartSub.update();
+        }
+        document.getElementById('subAlpha').addEventListener('input', e => { document.getElementById('valAlpha').innerText = e.target.value; updateSub(); });
+        document.getElementById('subBeta').addEventListener('input', e => { document.getElementById('valBeta').innerText = e.target.value; updateSub(); });
+        updateSub();
+
+        // ==========================================
+        // 模組二：預強調濾波器
+        // ==========================================
+        const ctxPre = document.getElementById('chartPre').getContext('2d');
+        const labelsPre = Array.from({length: 100}, (_, i) => (i/100 * Math.PI).toFixed(2));
+        
+        let chartPre = new Chart(ctxPre, {
+            type: 'line',
+            data: { labels: labelsPre, datasets: [{ label: '轉移函數振幅響應 |H(e^jw)|', data: [], borderColor: '#2196F3', backgroundColor: 'rgba(33, 150, 243, 0.2)', borderWidth: 3, fill: true, pointRadius: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 2.5, title: {display: true, text: 'Magnitude Gain'} }, x: {title: {display: true, text: 'Frequency (rad/sample) 0 ~ π'}} }, animation: {duration: 0} }
+        });
+
+        function updatePre() {
+            let a = parseFloat(document.getElementById('preA').value);
+            chartPre.data.datasets[0].data = labelsPre.map(w => Math.sqrt(1 + a*a - 2*a*Math.cos(w)));
+            chartPre.update();
+        }
+        document.getElementById('preA').addEventListener('input', e => { document.getElementById('valA').innerText = e.target.value; updatePre(); });
+        updatePre();
+
+        // ==========================================
+        // 模組三：VAD 判定
+        // ==========================================
+        const ctxVad = document.getElementById('chartVad').getContext('2d');
+        const labelsVad = Array.from({length: 50}, (_, i) => i);
+        // 模擬音樂能量：低->高->低->爆發
+        const energyData = labelsVad.map(i => {
+            if(i>15 && i<25) return Math.random()*20 + 60;
+            if(i>35 && i<45) return Math.random()*20 + 80;
+            return Math.random()*15 + 10;
+        });
+
+        let chartVad = new Chart(ctxVad, {
+            type: 'bar',
+            data: { labels: labelsVad, datasets: [
+                { label: '判定門檻', type: 'line', data: [], borderColor: '#FFCA28', borderWidth: 2, pointRadius: 0, fill: false },
+                { label: '短時能量', data: energyData, backgroundColor: [] }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 110, title: {display: true, text: 'Energy'} }, x: {title: {display: true, text: 'Frame Index'}} }, animation: {duration: 0} }
+        });
+
+        function updateVad() {
+            let th = parseFloat(document.getElementById('vadThresh').value);
+            chartVad.data.datasets[0].data = labelsVad.map(() => th);
+            chartVad.data.datasets[1].backgroundColor = energyData.map(e => e >= th ? '#64B5F6' : '#FF5252'); // 高於藍色(語音)，低於紅色(雜訊)
+            chartVad.update();
+        }
+        document.getElementById('vadThresh').addEventListener('input', e => { document.getElementById('valThresh').innerText = e.target.value; updateVad(); });
+        updateVad();
+
+        // ==========================================
+        // 模組四：OLA 重疊相加
+        // ==========================================
+        const ctxOla = document.getElementById('chartOla').getContext('2d');
+        const N = 100;
+        const labelsOla = Array.from({length: Math.floor(1.5*N)}, (_, i) => i);
+        
+        function hamming(n, offset) {
+            let idx = n - offset;
+            if(idx >= 0 && idx < N) return 0.54 - 0.46 * Math.cos(2*Math.PI*idx / (N-1));
+            return 0;
+        }
+
+        const win1 = labelsOla.map(i => hamming(i, 0));
+        const win2 = labelsOla.map(i => hamming(i, N/2));
+        const winSum = labelsOla.map((_, i) => win1[i] + win2[i]);
+
+        new Chart(ctxOla, {
+            type: 'line',
+            data: { labels: labelsOla, datasets: [
+                { label: 'Window 1', data: win1, borderColor: '#9C27B0', borderWidth: 2, fill: false, pointRadius: 0, tension: 0.3 },
+                { label: 'Window 2', data: win2, borderColor: '#E91E63', borderWidth: 2, fill: false, pointRadius: 0, tension: 0.3 },
+                { label: '疊加總和 (Sum)', data: winSum, borderColor: '#4CAF50', borderDash: [5,5], borderWidth: 3, fill: false, pointRadius: 0, tension: 0.3 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1.5, title: {display: true, text: 'Amplitude'} }, x: {title: {display: true, text: 'Time Index'}} } }
+        });
+
+    </script>
+</body>
+</html>
